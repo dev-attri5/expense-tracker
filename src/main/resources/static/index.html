@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Expense Tracker - Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- 1. Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="index.html" class="brand">💰 Expense Tracker</a>
+            <div class="nav-links">
+                <a href="index.html" class="active">Dashboard</a>
+                <a href="records.html">All Records</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+
+        <!-- 2. Alert Notification (Success / Error) -->
+        <div id="alert-box" class="alert"></div>
+
+        <!-- 3. Totals Summary Cards -->
+        <section class="summary-grid">
+            <div class="card summary-card">
+                <h3>Total Income</h3>
+                <div id="total-income" class="amount income">₹0.00</div>
+            </div>
+            <div class="card summary-card">
+                <h3>Total Expenses</h3>
+                <div id="total-expenses" class="amount expense">₹0.00</div>
+            </div>
+            <div class="card summary-card">
+                <h3>Balance</h3>
+                <div id="total-balance" class="amount balance">₹0.00</div>
+            </div>
+        </section>
+
+        <!-- 4. Add Record Form Card -->
+        <section class="card section-card">
+            <h2>Add Income or Expense</h2>
+            <form id="transaction-form">
+                <div class="form-grid">
+                    <!-- Type Selection -->
+                    <div class="form-group">
+                        <label for="type">Transaction Type</label>
+                        <select id="type" required>
+                            <option value="EXPENSE">Expense</option>
+                            <option value="INCOME">Income</option>
+                        </select>
+                    </div>
+
+                    <!-- Amount -->
+                    <div class="form-group">
+                        <label for="amount">Amount (₹)</label>
+                        <input type="number" id="amount" step="0.01" min="0.01" placeholder="e.g. 150.00" required>
+                    </div>
+
+                    <!-- Category -->
+                    <div class="form-group">
+                        <label for="category">Category</label>
+                        <select id="category" required>
+                            <!-- Expense categories by default -->
+                            <option value="Food">Food</option>
+                            <option value="Travel">Travel</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Bills">Bills</option>
+                            <option value="Education">Education</option>
+                            <option value="Health">Health</option>
+                            <option value="Other Expense">Other Expense</option>
+                        </select>
+                    </div>
+
+                    <!-- Date -->
+                    <div class="form-group">
+                        <label for="transaction-date">Date</label>
+                        <input type="date" id="transaction-date" required>
+                    </div>
+
+                    <!-- Note -->
+                    <div class="form-group full-width">
+                        <label for="note">Note (Optional)</label>
+                        <input type="text" id="note" placeholder="e.g. Lunch with friends">
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="form-group full-width">
+                        <button type="submit" class="btn btn-primary btn-full">Save Record</button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <!-- 5. Recent Records Table -->
+        <section class="card section-card">
+            <h2>Recent Records</h2>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th>Note</th>
+                            <th class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-records-body">
+                        <!-- Populated by JavaScript -->
+                        <tr>
+                            <td colspan="5" class="empty-message">Loading records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- JavaScript logic -->
+    <script src="js/app.js"></script>
+</body>
+</html>
