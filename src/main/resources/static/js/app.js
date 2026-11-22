@@ -122,7 +122,13 @@ function handleAddTransaction(event) {
     .then(async response => {
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(errorText || "Could not save record.");
+            let errorMessage = errorText;
+            try {
+                const parsed = JSON.parse(errorText);
+                if (parsed.message) errorMessage = parsed.message;
+                else if (parsed.error) errorMessage = parsed.error;
+            } catch (e) {}
+            throw new Error(errorMessage || "Could not save record.");
         }
         return response.json();
     })
@@ -476,7 +482,13 @@ function handleUpdateRecord(event) {
     .then(async response => {
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(errorText || "Failed to update record.");
+            let errorMessage = errorText;
+            try {
+                const parsed = JSON.parse(errorText);
+                if (parsed.message) errorMessage = parsed.message;
+                else if (parsed.error) errorMessage = parsed.error;
+            } catch (e) {}
+            throw new Error(errorMessage || "Failed to update record.");
         }
         return response.json();
     })

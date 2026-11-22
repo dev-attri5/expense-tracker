@@ -87,12 +87,13 @@ public class ExpenseDAO {
     public int addExpense(Expense expense) {
         String sql = "INSERT INTO transactions (type, amount, category, note, transaction_date) " +
                      "VALUES (?, ?, ?, ?, ?)";
+        java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
         return jdbcTemplate.update(sql,
                 expense.getType(),
                 expense.getAmount(),
                 expense.getCategory(),
                 expense.getNote(),
-                expense.getTransactionDate()
+                sqlDate
         );
     }
 
@@ -103,12 +104,13 @@ public class ExpenseDAO {
         String sql = "UPDATE transactions " +
                      "SET type = ?, amount = ?, category = ?, note = ?, transaction_date = ? " +
                      "WHERE id = ?";
+        java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
         return jdbcTemplate.update(sql,
                 expense.getType(),
                 expense.getAmount(),
                 expense.getCategory(),
                 expense.getNote(),
-                expense.getTransactionDate(),
+                sqlDate,
                 id
         );
     }

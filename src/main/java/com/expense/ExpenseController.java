@@ -62,13 +62,17 @@ public class ExpenseController {
 
         expense.setType(expense.getType().toUpperCase());
 
-        int rowsAffected = expenseDAO.addExpense(expense);
-        if (rowsAffected > 0) {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Record saved successfully.");
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to save record.");
+        try {
+            int rowsAffected = expenseDAO.addExpense(expense);
+            if (rowsAffected > 0) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Record saved successfully.");
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to save record.");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
         }
     }
 
@@ -86,13 +90,17 @@ public class ExpenseController {
 
         expense.setType(expense.getType().toUpperCase());
 
-        int rowsAffected = expenseDAO.updateExpense(id, expense);
-        if (rowsAffected > 0) {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Record updated successfully.");
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to update record.");
+        try {
+            int rowsAffected = expenseDAO.updateExpense(id, expense);
+            if (rowsAffected > 0) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Record updated successfully.");
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to update record.");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
         }
     }
 
@@ -103,13 +111,17 @@ public class ExpenseController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
         }
 
-        int rowsAffected = expenseDAO.deleteExpense(id);
-        if (rowsAffected > 0) {
-            Map<String, String> response = new HashMap<>();
-            response.put("message", "Record deleted successfully.");
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete record.");
+        try {
+            int rowsAffected = expenseDAO.deleteExpense(id);
+            if (rowsAffected > 0) {
+                Map<String, String> response = new HashMap<>();
+                response.put("message", "Record deleted successfully.");
+                return ResponseEntity.ok(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete record.");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
         }
     }
 
