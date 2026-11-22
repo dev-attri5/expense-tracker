@@ -14,6 +14,8 @@ import java.util.List;
 public class ExpenseDAO implements InitializingBean {
 
     private final JdbcTemplate jdbcTemplate;
+    private volatile String targetDatabase = null;
+    private volatile boolean initialized = false;
 
     // A RowMapper converts each row from MySQL into an Expense Java object
     private final RowMapper<Expense> rowMapper = (rs, rowNum) -> {
@@ -40,25 +42,97 @@ public class ExpenseDAO implements InitializingBean {
     }
 
     /**
-     * Automatically ensures the table and required columns exist.
+     * Checks if a database name is null, empty, or an internal MySQL system database.
+     */
+    private boolean isSystemDatabase(String db) {
+        if (db == null || db.trim().isEmpty()) {
+            return true;
+        }
+        String lower = db.trim().toLowerCase();
+        return lower.equals("sys")
+                || lower.equals("information_schema")
+                || lower.equals("performance_schema")
+                || lower.equals("mysql");
+    }
+
+    /**
+     * Returns the target database currently in use.
+     */
+    public String getTargetDatabase() {
+        if (!initialized || targetDatabase == null) {
+            ensureTableExists();
+        }
+        return targetDatabase;
+    }
+
+    /**
+     * Returns the fully qualified table name (e.g. `expense_tracker`.`transactions`)
+     * to avoid defaulting to internal schemas like `sys`.
+     */
+    public String getTableName() {
+        if (targetDatabase != null && !isSystemDatabase(targetDatabase)) {
+            return "`" + targetDatabase + "`.`transactions`";
+        }
+        return "`transactions`";
+    }
+
+    /**
+     * Automatically ensures the target database, table, and columns exist.
      */
     public synchronized void ensureTableExists() {
+        if (initialized && targetDatabase != null && !isSystemDatabase(targetDatabase)) {
+            return;
+        }
+
         try {
-            // 1. Check if a database is selected, fallback to expense_tracker if none
+            // 1. Identify currently active database
             String currentDb = null;
             try {
                 currentDb = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                System.err.println("Notice querying current database: " + e.getMessage());
+            }
 
-            if (currentDb == null || currentDb.trim().isEmpty()) {
+            // 2. If connected to a system schema (e.g. sys) or no database is selected
+            if (isSystemDatabase(currentDb)) {
+                boolean created = false;
+                // Attempt A: Create and use `expense_tracker`
                 try {
                     jdbcTemplate.execute("CREATE DATABASE IF NOT EXISTS `expense_tracker`");
                     jdbcTemplate.execute("USE `expense_tracker`");
-                } catch (Exception ignored) {}
+                    targetDatabase = "expense_tracker";
+                    created = true;
+                    System.out.println("Created and switched to database: expense_tracker");
+                } catch (Exception e) {
+                    System.err.println("Cannot CREATE DATABASE expense_tracker (likely restricted cloud user): " + e.getMessage());
+                }
+
+                // Attempt B: If user lacks CREATE DATABASE privileges, look for available non-system databases
+                if (!created) {
+                    try {
+                        List<String> dbs = jdbcTemplate.queryForList("SHOW DATABASES", String.class);
+                        for (String db : dbs) {
+                            if (!isSystemDatabase(db)) {
+                                targetDatabase = db;
+                                try {
+                                    jdbcTemplate.execute("USE `" + db + "`");
+                                } catch (Exception ignored) {}
+                                System.out.println("Found and switched to user database: " + db);
+                                break;
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("Notice querying SHOW DATABASES: " + e.getMessage());
+                    }
+                }
+            } else {
+                targetDatabase = currentDb;
             }
 
-            // 2. Create table if not exists
-            String createSql = "CREATE TABLE IF NOT EXISTS `transactions` (" +
+            String tableIdentifier = getTableName();
+
+            // 3. Create table if not exists
+            String createSql = "CREATE TABLE IF NOT EXISTS " + tableIdentifier + " (" +
                                "`id` INT PRIMARY KEY AUTO_INCREMENT, " +
                                "`type` VARCHAR(10) NOT NULL, " +
                                "`amount` DECIMAL(10,2) NOT NULL, " +
@@ -68,21 +142,23 @@ public class ExpenseDAO implements InitializingBean {
                                ")";
             jdbcTemplate.execute(createSql);
 
-            // 3. Fallback migrations in case table was created with different column names
+            // 4. Ensure required columns exist
             try {
-                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `transaction_date` DATE");
+                jdbcTemplate.execute("ALTER TABLE " + tableIdentifier + " ADD COLUMN `transaction_date` DATE");
             } catch (Exception ignored) {}
 
             try {
-                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `category` VARCHAR(50)");
+                jdbcTemplate.execute("ALTER TABLE " + tableIdentifier + " ADD COLUMN `category` VARCHAR(50)");
             } catch (Exception ignored) {}
 
             try {
-                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `note` VARCHAR(200)");
+                jdbcTemplate.execute("ALTER TABLE " + tableIdentifier + " ADD COLUMN `note` VARCHAR(200)");
             } catch (Exception ignored) {}
 
-            System.out.println("Database table `transactions` verified successfully in: " + currentDb);
+            initialized = true;
+            System.out.println("Database table " + tableIdentifier + " verified successfully.");
         } catch (Exception e) {
+            initialized = false;
             System.err.println("Database table check notice: " + e.getMessage());
         }
     }
@@ -99,7 +175,9 @@ public class ExpenseDAO implements InitializingBean {
      */
     public List<Expense> getFilteredExpenses(String type, LocalDate startDate, LocalDate endDate) {
         ensureTableExists();
-        StringBuilder sql = new StringBuilder("SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM `transactions` WHERE 1=1");
+        StringBuilder sql = new StringBuilder("SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM ")
+                .append(getTableName())
+                .append(" WHERE 1=1");
         List<Object> params = new ArrayList<>();
 
         if (type != null && !type.trim().isEmpty() && !type.equalsIgnoreCase("ALL")) {
@@ -128,7 +206,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public Expense getExpenseById(Long id) {
         ensureTableExists();
-        String sql = "SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM `transactions` WHERE `id` = ?";
+        String sql = "SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM " + getTableName() + " WHERE `id` = ?";
         List<Expense> results = jdbcTemplate.query(sql, rowMapper, id);
         if (results.isEmpty()) {
             return null;
@@ -141,7 +219,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public int addExpense(Expense expense) {
         ensureTableExists();
-        String sql = "INSERT INTO `transactions` (`type`, `amount`, `category`, `note`, `transaction_date`) " +
+        String sql = "INSERT INTO " + getTableName() + " (`type`, `amount`, `category`, `note`, `transaction_date`) " +
                      "VALUES (?, ?, ?, ?, ?)";
         java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
         return jdbcTemplate.update(sql,
@@ -158,7 +236,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public int updateExpense(Long id, Expense expense) {
         ensureTableExists();
-        String sql = "UPDATE `transactions` " +
+        String sql = "UPDATE " + getTableName() + " " +
                      "SET `type` = ?, `amount` = ?, `category` = ?, `note` = ?, `transaction_date` = ? " +
                      "WHERE `id` = ?";
         java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
@@ -177,7 +255,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public int deleteExpense(Long id) {
         ensureTableExists();
-        String sql = "DELETE FROM `transactions` WHERE `id` = ?";
+        String sql = "DELETE FROM " + getTableName() + " WHERE `id` = ?";
         return jdbcTemplate.update(sql, id);
     }
 
@@ -186,7 +264,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public BigDecimal getTotalIncome() {
         ensureTableExists();
-        String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM `transactions` WHERE `type` = 'INCOME'";
+        String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM " + getTableName() + " WHERE `type` = 'INCOME'";
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
 
@@ -195,7 +273,7 @@ public class ExpenseDAO implements InitializingBean {
      */
     public BigDecimal getTotalExpenses() {
         ensureTableExists();
-        String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM `transactions` WHERE `type` = 'EXPENSE'";
+        String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM " + getTableName() + " WHERE `type` = 'EXPENSE'";
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
 
@@ -205,7 +283,7 @@ public class ExpenseDAO implements InitializingBean {
     public boolean testConnection() {
         try {
             ensureTableExists();
-            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM `transactions`", Integer.class);
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + getTableName(), Integer.class);
             return count != null;
         } catch (Exception e) {
             return false;

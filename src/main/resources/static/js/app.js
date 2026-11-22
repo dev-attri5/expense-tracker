@@ -155,9 +155,10 @@ function loadRecentRecords() {
     if (!tbody) return;
 
     fetch("/api/transactions")
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                throw new Error("Failed to load records from server.");
+                const errText = await response.text();
+                throw new Error(errText || "Failed to load records from server.");
             }
             return response.json();
         })
@@ -176,7 +177,7 @@ function loadRecentRecords() {
         })
         .catch(error => {
             console.error("Error fetching records:", error);
-            tbody.innerHTML = `<tr><td colspan="5" class="empty-message" style="color: #dc3545;">Could not connect to the server.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="empty-message" style="color: #dc3545;">${escapeHtml(error.message || "Could not connect to the server.")}</td></tr>`;
         });
 }
 
@@ -191,9 +192,10 @@ function loadSummary() {
     if (!incomeElem || !expensesElem || !balanceElem) return;
 
     fetch("/api/summary")
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                throw new Error("Failed to load summary.");
+                const errText = await response.text();
+                throw new Error(errText || "Failed to load summary.");
             }
             return response.json();
         })
@@ -307,9 +309,10 @@ function handleFilterRecords(event) {
     const queryString = params.toString() ? "?" + params.toString() : "";
 
     fetch("/api/transactions" + queryString)
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                throw new Error("Failed to filter records.");
+                const errText = await response.text();
+                throw new Error(errText || "Failed to filter records.");
             }
             return response.json();
         })
@@ -318,7 +321,7 @@ function handleFilterRecords(event) {
         })
         .catch(error => {
             console.error("Error filtering records:", error);
-            showAlert("Failed to filter records.", "error");
+            showAlert(error.message || "Failed to filter records.", "error");
         });
 }
 
@@ -340,9 +343,10 @@ function loadAllRecords() {
     if (!tbody) return;
 
     fetch("/api/transactions")
-        .then(response => {
+        .then(async response => {
             if (!response.ok) {
-                throw new Error("Failed to load records from server.");
+                const errText = await response.text();
+                throw new Error(errText || "Failed to load records from server.");
             }
             return response.json();
         })
@@ -351,7 +355,7 @@ function loadAllRecords() {
         })
         .catch(error => {
             console.error("Error loading records:", error);
-            tbody.innerHTML = `<tr><td colspan="6" class="empty-message" style="color: #dc3545;">Could not connect to the server.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="empty-message" style="color: #dc3545;">${escapeHtml(error.message || "Could not connect to the server.")}</td></tr>`;
         });
 }
 

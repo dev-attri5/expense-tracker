@@ -1,6 +1,5 @@
 package com.expense;
 
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -28,29 +27,54 @@ public class ExpenseController {
         response.put("status", "UP");
         response.put("message", "Personal Expense Tracker backend is running!");
         response.put("databaseConnected", expenseDAO.testConnection());
+        response.put("activeDatabase", expenseDAO.getTargetDatabase());
         return response;
     }
 
     @GetMapping("/transactions")
-    public List<Expense> getTransactions(
+    public ResponseEntity<?> getTransactions(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
 
-        // Safely parse dates only if they are not null and not empty
-        LocalDate start = (startDate != null && !startDate.trim().isEmpty()) ? LocalDate.parse(startDate.trim()) : null;
-        LocalDate end = (endDate != null && !endDate.trim().isEmpty()) ? LocalDate.parse(endDate.trim()) : null;
+        try {
+            // Safely parse dates only if they are not null and not empty
+            LocalDate start = null;
+            if (startDate != null && !startDate.trim().isEmpty()) {
+                try {
+                    start = LocalDate.parse(startDate.trim());
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body("Invalid start date format. Please use YYYY-MM-DD.");
+                }
+            }
 
-        return expenseDAO.getFilteredExpenses(type, start, end);
+            LocalDate end = null;
+            if (endDate != null && !endDate.trim().isEmpty()) {
+                try {
+                    end = LocalDate.parse(endDate.trim());
+                } catch (Exception e) {
+                    return ResponseEntity.badRequest().body("Invalid end date format. Please use YYYY-MM-DD.");
+                }
+            }
+
+            List<Expense> list = expenseDAO.getFilteredExpenses(type, start, end);
+            return ResponseEntity.ok(list);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
+        }
     }
 
     @GetMapping("/transactions/{id}")
     public ResponseEntity<?> getTransactionById(@PathVariable Long id) {
-        Expense expense = expenseDAO.getExpenseById(id);
-        if (expense == null) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
+        try {
+            Expense expense = expenseDAO.getExpenseById(id);
+            if (expense == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
+            }
+            return ResponseEntity.ok(expense);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
         }
-        return ResponseEntity.ok(expense);
     }
 
     @PostMapping("/transactions")
@@ -125,6 +149,35 @@ public class ExpenseController {
         }
     }
 
+    @GetMapping("/summary")
+    public ResponseEntity<?> getSummary() {
+        try {
+            BigDecimal totalIncome = expenseDAO.getTotalIncome();
+            BigDecimal totalExpenses = expenseDAO.getTotalExpenses();
+
+            if (totalIncome == null) {
+                totalIncome = BigDecimal.ZERO;
+            }
+            if (totalExpenses == null) {
+                totalExpenses = BigDecimal.ZERO;
+            }
+
+            BigDecimal balance = totalIncome.subtract(totalExpenses);
+
+            Map<String, BigDecimal> summary = new HashMap<>();
+            summary.put("totalIncome", totalIncome);
+            summary.put("totalExpenses", totalExpenses);
+            summary.put("balance", balance);
+
+            return ResponseEntity.ok(summary);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
+        }
+    }
+
+    /**
+     * Unwraps nested exception causes to provide descriptive error details.
+     */
     private String buildErrorMessage(Exception e) {
         String msg = e.getMessage() != null ? e.getMessage() : e.toString();
         Throwable cause = e.getCause();
@@ -135,28 +188,6 @@ public class ExpenseController {
             cause = cause.getCause();
         }
         return "Database error: " + msg;
-    }
-
-    @GetMapping("/summary")
-    public Map<String, BigDecimal> getSummary() {
-        BigDecimal totalIncome = expenseDAO.getTotalIncome();
-        BigDecimal totalExpenses = expenseDAO.getTotalExpenses();
-
-        if (totalIncome == null) {
-            totalIncome = BigDecimal.ZERO;
-        }
-        if (totalExpenses == null) {
-            totalExpenses = BigDecimal.ZERO;
-        }
-
-        BigDecimal balance = totalIncome.subtract(totalExpenses);
-
-        Map<String, BigDecimal> summary = new HashMap<>();
-        summary.put("totalIncome", totalIncome);
-        summary.put("totalExpenses", totalExpenses);
-        summary.put("balance", balance);
-
-        return summary;
     }
 
     /**
