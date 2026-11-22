@@ -67,10 +67,8 @@ function initDashboard() {
         form.addEventListener("submit", handleAddTransaction);
     }
 
-    // Load recent records into table
+    // Load recent records and totals
     loadRecentRecords();
-
-    // Load summary totals (Total Income, Total Expenses, Balance)
     loadSummary();
 }
 
@@ -167,23 +165,7 @@ function loadRecentRecords() {
             tbody.innerHTML = "";
 
             recent.forEach(record => {
-                const tr = document.createElement("tr");
-
-                const badgeClass = record.type === "INCOME" ? "badge-income" : "badge-expense";
-                const amountClass = record.type === "INCOME" ? "income" : "expense";
-                const formattedAmount = Number(record.amount).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-
-                tr.innerHTML = `
-                    <td>${record.transactionDate || "-"}</td>
-                    <td><span class="badge ${badgeClass}">${record.type}</span></td>
-                    <td>${escapeHtml(record.category || "-")}</td>
-                    <td>${escapeHtml(record.note || "-")}</td>
-                    <td class="text-right ${amountClass}">₹${formattedAmount}</td>
-                `;
-                tbody.appendChild(tr);
+                tbody.appendChild(createRecordRow(record, false));
             });
         })
         .catch(error => {
@@ -229,7 +211,6 @@ function loadSummary() {
                 maximumFractionDigits: 2
             });
 
-            // If balance is negative, style it red, otherwise keep blue
             if (balance < 0) {
                 balanceElem.className = "amount expense";
             } else {
@@ -242,11 +223,8 @@ function loadSummary() {
 }
 
 /* ======================================================
-   RECORDS PAGE LOGIC (records.html) - PHASE 7
+   RECORDS PAGE LOGIC (records.html)
    ====================================================== */
-
-// Holds the currently loaded records in memory
-let allRecordsCache = [];
 
 function initRecordsPage() {
     const editForm = document.getElementById("edit-form");
@@ -283,13 +261,13 @@ function initRecordsPage() {
         });
     }
 
-    // Filter form submit listener (Phase 9)
+    // Filter form submit listener
     const filterForm = document.getElementById("filter-form");
     if (filterForm) {
         filterForm.addEventListener("submit", handleFilterRecords);
     }
 
-    // Clear filters button listener (Phase 9)
+    // Clear filters button listener
     const clearFiltersBtn = document.getElementById("clear-filters-btn");
     if (clearFiltersBtn) {
         clearFiltersBtn.addEventListener("click", handleClearFilters);
@@ -300,7 +278,7 @@ function initRecordsPage() {
 }
 
 /**
- * Handles filtering records by type and date range (Phase 9).
+ * Handles filtering records by type and date range.
  */
 function handleFilterRecords(event) {
     event.preventDefault();
@@ -363,8 +341,7 @@ function loadAllRecords() {
             return response.json();
         })
         .then(records => {
-            allRecordsCache = records || [];
-            renderRecordsTable(allRecordsCache);
+            renderRecordsTable(records || []);
         })
         .catch(error => {
             console.error("Error loading records:", error);
@@ -387,28 +364,43 @@ function renderRecordsTable(records) {
     tbody.innerHTML = "";
 
     records.forEach(record => {
-        const tr = document.createElement("tr");
+        tbody.appendChild(createRecordRow(record, true));
+    });
+}
 
-        const badgeClass = record.type === "INCOME" ? "badge-income" : "badge-expense";
-        const amountClass = record.type === "INCOME" ? "income" : "expense";
-        const formattedAmount = Number(record.amount).toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
+/**
+ * Shared helper to build a <tr> element for a transaction record.
+ * Eliminates duplicate row-building logic across pages.
+ */
+function createRecordRow(record, includeActions = false) {
+    const tr = document.createElement("tr");
 
-        tr.innerHTML = `
-            <td>${record.transactionDate || "-"}</td>
-            <td><span class="badge ${badgeClass}">${record.type}</span></td>
-            <td>${escapeHtml(record.category || "-")}</td>
-            <td>${escapeHtml(record.note || "-")}</td>
-            <td class="text-right ${amountClass}">₹${formattedAmount}</td>
+    const badgeClass = record.type === "INCOME" ? "badge-income" : "badge-expense";
+    const amountClass = record.type === "INCOME" ? "income" : "expense";
+    const formattedAmount = Number(record.amount).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+
+    let html = `
+        <td>${record.transactionDate || "-"}</td>
+        <td><span class="badge ${badgeClass}">${record.type}</span></td>
+        <td>${escapeHtml(record.category || "-")}</td>
+        <td>${escapeHtml(record.note || "-")}</td>
+        <td class="text-right ${amountClass}">₹${formattedAmount}</td>
+    `;
+
+    if (includeActions) {
+        html += `
             <td style="text-align: center;">
                 <button class="btn btn-edit" onclick="openEditModal(${record.id})">Edit</button>
                 <button class="btn btn-danger" onclick="deleteRecord(${record.id})">Delete</button>
             </td>
         `;
-        tbody.appendChild(tr);
-    });
+    }
+
+    tr.innerHTML = html;
+    return tr;
 }
 
 /**
@@ -437,11 +429,9 @@ window.openEditModal = function(id) {
             editDate.value = record.transactionDate;
             editNote.value = record.note || "";
 
-            // Populate categories for this type and select current category
             updateCategoryDropdown(record.type, editCategory);
             editCategory.value = record.category;
 
-            // Show the modal
             editModal.style.display = "flex";
         })
         .catch(error => {
@@ -464,7 +454,7 @@ function handleUpdateRecord(event) {
     const note = document.getElementById("edit-note").value.trim();
 
     if (isNaN(amountVal) || amountVal <= 0) {
-        alert("Please enter an amount greater than zero.");
+        showAlert("Please enter an amount greater than zero.", "error", "modal-alert-box");
         return;
     }
 
@@ -493,11 +483,11 @@ function handleUpdateRecord(event) {
     .then(data => {
         document.getElementById("edit-modal").style.display = "none";
         showAlert(data.message || "Record updated successfully.", "success");
-        loadAllRecords(); // Refresh the table
+        loadAllRecords();
     })
     .catch(error => {
         console.error("Error updating record:", error);
-        showAlert(error.message || "Failed to update record.", "error");
+        showAlert(error.message || "Failed to update record.", "error", "modal-alert-box");
     });
 }
 
@@ -505,13 +495,11 @@ function handleUpdateRecord(event) {
  * Asks for confirmation and deletes a record.
  */
 window.deleteRecord = function(id) {
-    // 1. Ask for confirmation before deleting
     const confirmed = confirm("Are you sure you want to delete this record? This action cannot be undone.");
     if (!confirmed) {
         return;
     }
 
-    // 2. Call Java DELETE API
     fetch(`/api/transactions/${id}`, {
         method: "DELETE"
     })
@@ -524,7 +512,7 @@ window.deleteRecord = function(id) {
     })
     .then(data => {
         showAlert(data.message || "Record deleted successfully.", "success");
-        loadAllRecords(); // 3. Refresh table after deletion
+        loadAllRecords();
     })
     .catch(error => {
         console.error("Error deleting record:", error);
@@ -537,10 +525,11 @@ window.deleteRecord = function(id) {
    ====================================================== */
 
 /**
- * Displays a temporary green or red banner alert message at the top.
+ * Displays a temporary green or red banner alert message.
+ * Defaults to 'alert-box' on the main page, or can target 'modal-alert-box' inside modals.
  */
-function showAlert(message, type) {
-    const alertBox = document.getElementById("alert-box");
+function showAlert(message, type, targetId = "alert-box") {
+    const alertBox = document.getElementById(targetId) || document.getElementById("alert-box");
     if (!alertBox) return;
 
     alertBox.textContent = message;

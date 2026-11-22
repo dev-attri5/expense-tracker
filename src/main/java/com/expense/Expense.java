@@ -3,24 +3,20 @@ package com.expense;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-/**
- * Expense represents a single transaction (either INCOME or EXPENSE).
- * It holds the 6 fields described in ARCHITECTURE.md and PRD.md.
- */
 public class Expense {
 
     private Long id;
-    private String type;             // "INCOME" or "EXPENSE"
-    private BigDecimal amount;       // Exact monetary amount
-    private String category;         // e.g. "Food", "Travel", "Salary"
-    private String note;             // Optional description
-    private LocalDate transactionDate; // Date of the transaction
+    private String type;
+    private BigDecimal amount;
+    private String category;
+    private String note;
+    private LocalDate transactionDate;
 
     // Default constructor (required by Spring and JSON parsers)
     public Expense() {
     }
 
-    // Constructor with all fields (useful when reading from MySQL)
+    // All-arguments constructor
     public Expense(Long id, String type, BigDecimal amount, String category, String note, LocalDate transactionDate) {
         this.id = id;
         this.type = type;
@@ -29,17 +25,6 @@ public class Expense {
         this.note = note;
         this.transactionDate = transactionDate;
     }
-
-    // Constructor without id (useful when creating a new record before MySQL assigns an id)
-    public Expense(String type, BigDecimal amount, String category, String note, LocalDate transactionDate) {
-        this.type = type;
-        this.amount = amount;
-        this.category = category;
-        this.note = note;
-        this.transactionDate = transactionDate;
-    }
-
-    // --- Getters and Setters ---
 
     public Long getId() {
         return id;

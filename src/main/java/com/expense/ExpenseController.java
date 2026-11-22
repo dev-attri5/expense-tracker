@@ -11,13 +11,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * ExpenseController handles HTTP requests sent from the browser/frontend.
- * It calls ExpenseDAO to perform database operations.
- */
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*") // Allows web browsers to make requests smoothly
+@CrossOrigin(origins = "*")
 public class ExpenseController {
 
     private final ExpenseDAO expenseDAO;
@@ -26,10 +22,6 @@ public class ExpenseController {
         this.expenseDAO = expenseDAO;
     }
 
-    /**
-     * 1. GET /api/status
-     * Simple health check to verify server and MySQL connection.
-     */
     @GetMapping("/status")
     public Map<String, Object> getStatus() {
         Map<String, Object> response = new HashMap<>();
@@ -39,25 +31,19 @@ public class ExpenseController {
         return response;
     }
 
-    /**
-     * 2. GET /api/transactions
-     * Fetches all records from the database, with optional filtering by type, startDate, and endDate.
-     */
     @GetMapping("/transactions")
     public List<Expense> getTransactions(
             @RequestParam(required = false) String type,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate) {
-        if ((type != null && !type.trim().isEmpty() && !type.equalsIgnoreCase("ALL")) || startDate != null || endDate != null) {
-            return expenseDAO.getFilteredExpenses(type, startDate, endDate);
-        }
-        return expenseDAO.getAllExpenses();
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        // Safely parse dates only if they are not null and not empty
+        LocalDate start = (startDate != null && !startDate.trim().isEmpty()) ? LocalDate.parse(startDate.trim()) : null;
+        LocalDate end = (endDate != null && !endDate.trim().isEmpty()) ? LocalDate.parse(endDate.trim()) : null;
+
+        return expenseDAO.getFilteredExpenses(type, start, end);
     }
 
-    /**
-     * 3. GET /api/transactions/{id}
-     * Fetches a single record by its ID.
-     */
     @GetMapping("/transactions/{id}")
     public ResponseEntity<?> getTransactionById(@PathVariable Long id) {
         Expense expense = expenseDAO.getExpenseById(id);
@@ -67,27 +53,13 @@ public class ExpenseController {
         return ResponseEntity.ok(expense);
     }
 
-    /**
-     * 4. POST /api/transactions
-     * Saves a new transaction into the database.
-     */
     @PostMapping("/transactions")
     public ResponseEntity<?> addTransaction(@RequestBody Expense expense) {
-        // Simple validation checks for beginner safety
-        if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            return ResponseEntity.badRequest().body("Amount must be greater than zero.");
-        }
-        if (expense.getType() == null || (!expense.getType().equalsIgnoreCase("INCOME") && !expense.getType().equalsIgnoreCase("EXPENSE"))) {
-            return ResponseEntity.badRequest().body("Type must be INCOME or EXPENSE.");
-        }
-        if (expense.getCategory() == null || expense.getCategory().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("Category is required.");
-        }
-        if (expense.getTransactionDate() == null) {
-            return ResponseEntity.badRequest().body("Date is required.");
+        String validationError = validateExpense(expense);
+        if (validationError != null) {
+            return ResponseEntity.badRequest().body(validationError);
         }
 
-        // Normalize type to UPPERCASE (INCOME / EXPENSE)
         expense.setType(expense.getType().toUpperCase());
 
         int rowsAffected = expenseDAO.addExpense(expense);
@@ -100,30 +72,16 @@ public class ExpenseController {
         }
     }
 
-    /**
-     * 5. PUT /api/transactions/{id}
-     * Updates an existing transaction.
-     */
     @PutMapping("/transactions/{id}")
     public ResponseEntity<?> updateTransaction(@PathVariable Long id, @RequestBody Expense expense) {
-        // Verify that the record exists first
         Expense existing = expenseDAO.getExpenseById(id);
         if (existing == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
         }
 
-        // Validation
-        if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            return ResponseEntity.badRequest().body("Amount must be greater than zero.");
-        }
-        if (expense.getType() == null || (!expense.getType().equalsIgnoreCase("INCOME") && !expense.getType().equalsIgnoreCase("EXPENSE"))) {
-            return ResponseEntity.badRequest().body("Type must be INCOME or EXPENSE.");
-        }
-        if (expense.getCategory() == null || expense.getCategory().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("Category is required.");
-        }
-        if (expense.getTransactionDate() == null) {
-            return ResponseEntity.badRequest().body("Date is required.");
+        String validationError = validateExpense(expense);
+        if (validationError != null) {
+            return ResponseEntity.badRequest().body(validationError);
         }
 
         expense.setType(expense.getType().toUpperCase());
@@ -138,10 +96,6 @@ public class ExpenseController {
         }
     }
 
-    /**
-     * 6. DELETE /api/transactions/{id}
-     * Deletes a record from the database.
-     */
     @DeleteMapping("/transactions/{id}")
     public ResponseEntity<?> deleteTransaction(@PathVariable Long id) {
         Expense existing = expenseDAO.getExpenseById(id);
@@ -159,11 +113,6 @@ public class ExpenseController {
         }
     }
 
-    /**
-     * 7. GET /api/summary
-     * Calculates and returns totalIncome, totalExpenses, and balance.
-     * Balance = Total Income - Total Expenses
-     */
     @GetMapping("/summary")
     public Map<String, BigDecimal> getSummary() {
         BigDecimal totalIncome = expenseDAO.getTotalIncome();
@@ -176,7 +125,6 @@ public class ExpenseController {
             totalExpenses = BigDecimal.ZERO;
         }
 
-        // Calculate balance using exact BigDecimal arithmetic
         BigDecimal balance = totalIncome.subtract(totalExpenses);
 
         Map<String, BigDecimal> summary = new HashMap<>();
@@ -185,5 +133,25 @@ public class ExpenseController {
         summary.put("balance", balance);
 
         return summary;
+    }
+
+    /**
+     * Shared helper method to validate an incoming Expense object.
+     * Returns an error message if invalid, or null if valid.
+     */
+    private String validateExpense(Expense expense) {
+        if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            return "Amount must be greater than zero.";
+        }
+        if (expense.getType() == null || (!expense.getType().equalsIgnoreCase("INCOME") && !expense.getType().equalsIgnoreCase("EXPENSE"))) {
+            return "Type must be INCOME or EXPENSE.";
+        }
+        if (expense.getCategory() == null || expense.getCategory().trim().isEmpty()) {
+            return "Category is required.";
+        }
+        if (expense.getTransactionDate() == null) {
+            return "Date is required.";
+        }
+        return null;
     }
 }
