@@ -1,6 +1,6 @@
 package com.expense;
 
-import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.InitializingBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Repository
-public class ExpenseDAO {
+public class ExpenseDAO implements InitializingBean {
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -34,12 +34,30 @@ public class ExpenseDAO {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    @Override
+    public void afterPropertiesSet() {
+        ensureTableExists();
+    }
+
     /**
-     * Automatically ensure the table exists on application startup.
+     * Automatically ensures the table and required columns exist.
      */
-    @PostConstruct
-    public void initTable() {
+    public synchronized void ensureTableExists() {
         try {
+            // 1. Check if a database is selected, fallback to expense_tracker if none
+            String currentDb = null;
+            try {
+                currentDb = jdbcTemplate.queryForObject("SELECT DATABASE()", String.class);
+            } catch (Exception ignored) {}
+
+            if (currentDb == null || currentDb.trim().isEmpty()) {
+                try {
+                    jdbcTemplate.execute("CREATE DATABASE IF NOT EXISTS `expense_tracker`");
+                    jdbcTemplate.execute("USE `expense_tracker`");
+                } catch (Exception ignored) {}
+            }
+
+            // 2. Create table if not exists
             String createSql = "CREATE TABLE IF NOT EXISTS `transactions` (" +
                                "`id` INT PRIMARY KEY AUTO_INCREMENT, " +
                                "`type` VARCHAR(10) NOT NULL, " +
@@ -49,9 +67,23 @@ public class ExpenseDAO {
                                "`transaction_date` DATE NOT NULL" +
                                ")";
             jdbcTemplate.execute(createSql);
-            System.out.println("Table `transactions` verified/created successfully.");
+
+            // 3. Fallback migrations in case table was created with different column names
+            try {
+                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `transaction_date` DATE");
+            } catch (Exception ignored) {}
+
+            try {
+                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `category` VARCHAR(50)");
+            } catch (Exception ignored) {}
+
+            try {
+                jdbcTemplate.execute("ALTER TABLE `transactions` ADD COLUMN `note` VARCHAR(200)");
+            } catch (Exception ignored) {}
+
+            System.out.println("Database table `transactions` verified successfully in: " + currentDb);
         } catch (Exception e) {
-            System.err.println("Could not auto-create table `transactions`: " + e.getMessage());
+            System.err.println("Database table check notice: " + e.getMessage());
         }
     }
 
@@ -66,6 +98,7 @@ public class ExpenseDAO {
      * Filter records by type, start date, and end date (or return all if no filters given).
      */
     public List<Expense> getFilteredExpenses(String type, LocalDate startDate, LocalDate endDate) {
+        ensureTableExists();
         StringBuilder sql = new StringBuilder("SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM `transactions` WHERE 1=1");
         List<Object> params = new ArrayList<>();
 
@@ -94,6 +127,7 @@ public class ExpenseDAO {
      * Find a single record by its ID.
      */
     public Expense getExpenseById(Long id) {
+        ensureTableExists();
         String sql = "SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM `transactions` WHERE `id` = ?";
         List<Expense> results = jdbcTemplate.query(sql, rowMapper, id);
         if (results.isEmpty()) {
@@ -106,6 +140,7 @@ public class ExpenseDAO {
      * Add a new record into the database.
      */
     public int addExpense(Expense expense) {
+        ensureTableExists();
         String sql = "INSERT INTO `transactions` (`type`, `amount`, `category`, `note`, `transaction_date`) " +
                      "VALUES (?, ?, ?, ?, ?)";
         java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
@@ -122,6 +157,7 @@ public class ExpenseDAO {
      * Update an existing record by its ID.
      */
     public int updateExpense(Long id, Expense expense) {
+        ensureTableExists();
         String sql = "UPDATE `transactions` " +
                      "SET `type` = ?, `amount` = ?, `category` = ?, `note` = ?, `transaction_date` = ? " +
                      "WHERE `id` = ?";
@@ -140,6 +176,7 @@ public class ExpenseDAO {
      * Delete a record from the database using its ID.
      */
     public int deleteExpense(Long id) {
+        ensureTableExists();
         String sql = "DELETE FROM `transactions` WHERE `id` = ?";
         return jdbcTemplate.update(sql, id);
     }
@@ -148,6 +185,7 @@ public class ExpenseDAO {
      * Calculate total income.
      */
     public BigDecimal getTotalIncome() {
+        ensureTableExists();
         String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM `transactions` WHERE `type` = 'INCOME'";
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
@@ -156,6 +194,7 @@ public class ExpenseDAO {
      * Calculate total expenses.
      */
     public BigDecimal getTotalExpenses() {
+        ensureTableExists();
         String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM `transactions` WHERE `type` = 'EXPENSE'";
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
@@ -165,6 +204,7 @@ public class ExpenseDAO {
      */
     public boolean testConnection() {
         try {
+            ensureTableExists();
             Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM `transactions`", Integer.class);
             return count != null;
         } catch (Exception e) {

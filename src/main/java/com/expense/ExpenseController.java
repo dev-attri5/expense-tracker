@@ -72,7 +72,7 @@ public class ExpenseController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to save record.");
             }
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
         }
     }
 
@@ -100,7 +100,7 @@ public class ExpenseController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to update record.");
             }
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
         }
     }
 
@@ -121,8 +121,20 @@ public class ExpenseController {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete record.");
             }
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Database error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
         }
+    }
+
+    private String buildErrorMessage(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage() : e.toString();
+        Throwable cause = e.getCause();
+        while (cause != null) {
+            if (cause.getMessage() != null && !cause.getMessage().trim().isEmpty()) {
+                msg += " | Cause: " + cause.getMessage();
+            }
+            cause = cause.getCause();
+        }
+        return "Database error: " + msg;
     }
 
     @GetMapping("/summary")
