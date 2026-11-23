@@ -6,6 +6,7 @@ import java.time.LocalDate;
 public class Expense {
 
     private Long id;
+    private Long userId;
     private String type;
     private BigDecimal amount;
     private String category;
@@ -16,9 +17,20 @@ public class Expense {
     public Expense() {
     }
 
-    // All-arguments constructor
+    // Constructor without userId (backward-compatible)
     public Expense(Long id, String type, BigDecimal amount, String category, String note, LocalDate transactionDate) {
         this.id = id;
+        this.type = type;
+        this.amount = amount;
+        this.category = category;
+        this.note = note;
+        this.transactionDate = transactionDate;
+    }
+
+    // All-arguments constructor with userId
+    public Expense(Long id, Long userId, String type, BigDecimal amount, String category, String note, LocalDate transactionDate) {
+        this.id = id;
+        this.userId = userId;
         this.type = type;
         this.amount = amount;
         this.category = category;
@@ -32,6 +44,14 @@ public class Expense {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public Long getUserId() {
+        return userId;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
     }
 
     public String getType() {
@@ -78,6 +98,7 @@ public class Expense {
     public String toString() {
         return "Expense{" +
                 "id=" + id +
+                ", userId=" + userId +
                 ", type='" + type + '\'' +
                 ", amount=" + amount +
                 ", category='" + category + '\'' +

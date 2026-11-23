@@ -1,5 +1,6 @@
 package com.expense;
 
+import jakarta.servlet.http.HttpSession;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,11 @@ public class ExpenseController {
         this.expenseDAO = expenseDAO;
     }
 
+    private Long getLoggedInUserId(HttpSession session) {
+        if (session == null) return null;
+        return (Long) session.getAttribute("USER_ID");
+    }
+
     @GetMapping("/status")
     public Map<String, Object> getStatus() {
         Map<String, Object> response = new HashMap<>();
@@ -35,7 +41,13 @@ public class ExpenseController {
     public ResponseEntity<?> getTransactions(
             @RequestParam(required = false) String type,
             @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
+            @RequestParam(required = false) String endDate,
+            HttpSession session) {
+
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
 
         try {
             // Safely parse dates only if they are not null and not empty
@@ -57,7 +69,7 @@ public class ExpenseController {
                 }
             }
 
-            List<Expense> list = expenseDAO.getFilteredExpenses(type, start, end);
+            List<Expense> list = expenseDAO.getFilteredExpenses(userId, type, start, end);
             return ResponseEntity.ok(list);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(buildErrorMessage(e));
@@ -65,9 +77,14 @@ public class ExpenseController {
     }
 
     @GetMapping("/transactions/{id}")
-    public ResponseEntity<?> getTransactionById(@PathVariable Long id) {
+    public ResponseEntity<?> getTransactionById(@PathVariable Long id, HttpSession session) {
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
+
         try {
-            Expense expense = expenseDAO.getExpenseById(id);
+            Expense expense = expenseDAO.getExpenseById(id, userId);
             if (expense == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
             }
@@ -78,12 +95,18 @@ public class ExpenseController {
     }
 
     @PostMapping("/transactions")
-    public ResponseEntity<?> addTransaction(@RequestBody Expense expense) {
+    public ResponseEntity<?> addTransaction(@RequestBody Expense expense, HttpSession session) {
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
+
         String validationError = validateExpense(expense);
         if (validationError != null) {
             return ResponseEntity.badRequest().body(validationError);
         }
 
+        expense.setUserId(userId);
         expense.setType(expense.getType().toUpperCase());
 
         try {
@@ -101,8 +124,13 @@ public class ExpenseController {
     }
 
     @PutMapping("/transactions/{id}")
-    public ResponseEntity<?> updateTransaction(@PathVariable Long id, @RequestBody Expense expense) {
-        Expense existing = expenseDAO.getExpenseById(id);
+    public ResponseEntity<?> updateTransaction(@PathVariable Long id, @RequestBody Expense expense, HttpSession session) {
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
+
+        Expense existing = expenseDAO.getExpenseById(id, userId);
         if (existing == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
         }
@@ -115,7 +143,7 @@ public class ExpenseController {
         expense.setType(expense.getType().toUpperCase());
 
         try {
-            int rowsAffected = expenseDAO.updateExpense(id, expense);
+            int rowsAffected = expenseDAO.updateExpense(id, userId, expense);
             if (rowsAffected > 0) {
                 Map<String, String> response = new HashMap<>();
                 response.put("message", "Record updated successfully.");
@@ -129,14 +157,19 @@ public class ExpenseController {
     }
 
     @DeleteMapping("/transactions/{id}")
-    public ResponseEntity<?> deleteTransaction(@PathVariable Long id) {
-        Expense existing = expenseDAO.getExpenseById(id);
+    public ResponseEntity<?> deleteTransaction(@PathVariable Long id, HttpSession session) {
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
+
+        Expense existing = expenseDAO.getExpenseById(id, userId);
         if (existing == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Transaction not found with id: " + id);
         }
 
         try {
-            int rowsAffected = expenseDAO.deleteExpense(id);
+            int rowsAffected = expenseDAO.deleteExpense(id, userId);
             if (rowsAffected > 0) {
                 Map<String, String> response = new HashMap<>();
                 response.put("message", "Record deleted successfully.");
@@ -150,10 +183,15 @@ public class ExpenseController {
     }
 
     @GetMapping("/summary")
-    public ResponseEntity<?> getSummary() {
+    public ResponseEntity<?> getSummary(HttpSession session) {
+        Long userId = getLoggedInUserId(session);
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Unauthorized. Please log in.");
+        }
+
         try {
-            BigDecimal totalIncome = expenseDAO.getTotalIncome();
-            BigDecimal totalExpenses = expenseDAO.getTotalExpenses();
+            BigDecimal totalIncome = expenseDAO.getTotalIncome(userId);
+            BigDecimal totalExpenses = expenseDAO.getTotalExpenses(userId);
 
             if (totalIncome == null) {
                 totalIncome = BigDecimal.ZERO;

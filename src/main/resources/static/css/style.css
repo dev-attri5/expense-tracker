@@ -380,3 +380,60 @@ tr:hover {
         margin-right: 8px;
     }
 }
+
+
+/* 13. Auth Pages Styling */
+.auth-container {
+    max-width: 440px;
+    margin: 50px auto 0 auto;
+    padding: 0 16px;
+}
+
+.auth-card {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 32px 28px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e9ecef;
+}
+
+.auth-card h2 {
+    margin-bottom: 8px;
+    color: #1a73e8;
+    text-align: center;
+}
+
+.auth-card p.subtitle {
+    text-align: center;
+    color: #6c757d;
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+}
+
+.auth-footer {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.auth-footer a {
+    color: #1a73e8;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+.btn-sm {
+    padding: 6px 14px;
+    font-size: 0.85rem;
+}
+
+.user-nav-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}

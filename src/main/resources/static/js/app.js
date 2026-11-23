@@ -25,18 +25,156 @@ const INCOME_CATEGORIES = [
 
 // Run when the HTML page is fully loaded in the browser
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. Check if we are on index.html (Dashboard)
-    const transactionForm = document.getElementById("transaction-form");
-    if (transactionForm) {
-        initDashboard();
+    // 1. Check if on login.html
+    const loginForm = document.getElementById("login-form");
+    if (loginForm) {
+        initLoginPage();
+        return;
     }
 
-    // 2. Check if we are on records.html (All Records)
-    const allRecordsTable = document.getElementById("all-records-body");
-    if (allRecordsTable) {
-        initRecordsPage();
+    // 2. Check if on register.html
+    const registerForm = document.getElementById("register-form");
+    if (registerForm) {
+        initRegisterPage();
+        return;
     }
+
+    // 3. For protected pages (index.html, records.html), check session first
+    checkAuthAndInit();
 });
+
+/* ======================================================
+   AUTHENTICATION LOGIC (login.html & register.html)
+   ====================================================== */
+
+/**
+ * Checks if user is authenticated. If not, redirects to login.html.
+ */
+function checkAuthAndInit() {
+    fetch("/api/auth/me")
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Unauthorized");
+            }
+            return response.json();
+        })
+        .then(userData => {
+            // Setup navbar user profile and logout
+            setupUserNavbar(userData.username);
+
+            // Initialize whichever protected page is active
+            if (document.getElementById("transaction-form")) {
+                initDashboard();
+            } else if (document.getElementById("all-records-body")) {
+                initRecordsPage();
+            }
+        })
+        .catch(() => {
+            window.location.href = "login.html";
+        });
+}
+
+function setupUserNavbar(username) {
+    const greeting = document.getElementById("user-greeting");
+    if (greeting && username) {
+        greeting.textContent = "👤 " + username;
+    }
+
+    const logoutBtn = document.getElementById("logout-btn");
+    if (logoutBtn) {
+        logoutBtn.addEventListener("click", handleLogout);
+    }
+}
+
+function handleLogout() {
+    fetch("/api/auth/logout", { method: "POST" })
+        .finally(() => {
+            window.location.href = "login.html";
+        });
+}
+
+function initLoginPage() {
+    // If already logged in, redirect to dashboard
+    fetch("/api/auth/me")
+        .then(res => {
+            if (res.ok) window.location.href = "index.html";
+        })
+        .catch(() => {});
+
+    const form = document.getElementById("login-form");
+    if (!form) return;
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+
+        fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error(err || "Invalid username or password.");
+            }
+            return response.json();
+        })
+        .then(() => {
+            window.location.href = "index.html";
+        })
+        .catch(err => {
+            showAlert(err.message, "error");
+        });
+    });
+}
+
+function initRegisterPage() {
+    // If already logged in, redirect to dashboard
+    fetch("/api/auth/me")
+        .then(res => {
+            if (res.ok) window.location.href = "index.html";
+        })
+        .catch(() => {});
+
+    const form = document.getElementById("register-form");
+    if (!form) return;
+
+    form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+        const confirm = document.getElementById("confirm-password").value;
+
+        if (password !== confirm) {
+            showAlert("Passwords do not match.", "error");
+            return;
+        }
+
+        fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        })
+        .then(async response => {
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error(err || "Failed to create account.");
+            }
+            return response.json();
+        })
+        .then(() => {
+            showAlert("Account created! Redirecting to dashboard...", "success");
+            setTimeout(() => {
+                window.location.href = "index.html";
+            }, 800);
+        })
+        .catch(err => {
+            showAlert(err.message, "error");
+        });
+    });
+}
 
 /* ======================================================
    DASHBOARD LOGIC (index.html)
@@ -121,6 +259,10 @@ function handleAddTransaction(event) {
     })
     .then(async response => {
         if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = "login.html";
+                return;
+            }
             const errorText = await response.text();
             let errorMessage = errorText;
             try {
@@ -157,6 +299,10 @@ function loadRecentRecords() {
     fetch("/api/transactions")
         .then(async response => {
             if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = "login.html";
+                    return;
+                }
                 const errText = await response.text();
                 throw new Error(errText || "Failed to load records from server.");
             }
@@ -194,6 +340,10 @@ function loadSummary() {
     fetch("/api/summary")
         .then(async response => {
             if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = "login.html";
+                    return;
+                }
                 const errText = await response.text();
                 throw new Error(errText || "Failed to load summary.");
             }
@@ -311,6 +461,10 @@ function handleFilterRecords(event) {
     fetch("/api/transactions" + queryString)
         .then(async response => {
             if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = "login.html";
+                    return;
+                }
                 const errText = await response.text();
                 throw new Error(errText || "Failed to filter records.");
             }
@@ -345,6 +499,10 @@ function loadAllRecords() {
     fetch("/api/transactions")
         .then(async response => {
             if (!response.ok) {
+                if (response.status === 401) {
+                    window.location.href = "login.html";
+                    return;
+                }
                 const errText = await response.text();
                 throw new Error(errText || "Failed to load records from server.");
             }
@@ -485,6 +643,10 @@ function handleUpdateRecord(event) {
     })
     .then(async response => {
         if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = "login.html";
+                return;
+            }
             const errorText = await response.text();
             let errorMessage = errorText;
             try {
@@ -521,6 +683,10 @@ window.deleteRecord = function(id) {
     })
     .then(async response => {
         if (!response.ok) {
+            if (response.status === 401) {
+                window.location.href = "login.html";
+                return;
+            }
             const errorText = await response.text();
             throw new Error(errorText || "Failed to delete record.");
         }

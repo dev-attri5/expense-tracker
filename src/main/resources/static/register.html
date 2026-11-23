@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Personal Expense Tracker</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Navigation Header -->
+    <nav class="navbar">
+        <div class="container">
+            <a href="login.html" class="brand">💰 Expense Tracker</a>
+            <div class="nav-links">
+                <a href="login.html">Log In</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Register Container -->
+    <div class="auth-container">
+        <!-- Alert Notification Box -->
+        <div id="alert-box" class="alert"></div>
+
+        <div class="auth-card">
+            <h2>Create an Account</h2>
+            <p class="subtitle">Keep track of your personal finances privately</p>
+
+            <form id="register-form">
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" placeholder="Choose a username" required autofocus minlength="3">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="At least 4 characters" required minlength="4">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label for="confirm-password">Confirm Password</label>
+                    <input type="password" id="confirm-password" placeholder="Re-enter password" required minlength="4">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-full">Register</button>
+            </form>
+
+            <div class="auth-footer">
+                Already have an account? <a href="login.html">Log in here</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript logic -->
+    <script src="js/app.js"></script>
+</body>
+</html>

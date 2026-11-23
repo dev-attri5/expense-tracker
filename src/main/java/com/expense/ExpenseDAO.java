@@ -29,6 +29,14 @@ public class ExpenseDAO implements InitializingBean {
         if (rs.getDate("transaction_date") != null) {
             expense.setTransactionDate(rs.getDate("transaction_date").toLocalDate());
         }
+
+        try {
+            long uid = rs.getLong("user_id");
+            if (!rs.wasNull()) {
+                expense.setUserId(uid);
+            }
+        } catch (Exception ignored) {}
+
         return expense;
     };
 
@@ -130,10 +138,23 @@ public class ExpenseDAO implements InitializingBean {
             }
 
             String tableIdentifier = getTableName();
+            String usersTable = (targetDatabase != null && !isSystemDatabase(targetDatabase))
+                    ? "`" + targetDatabase + "`.`users`"
+                    : "`users`";
 
-            // 3. Create table if not exists
+            // 3. Create users table if not exists
+            String createUsersSql = "CREATE TABLE IF NOT EXISTS " + usersTable + " (" +
+                                    "`id` INT PRIMARY KEY AUTO_INCREMENT, " +
+                                    "`username` VARCHAR(50) NOT NULL UNIQUE, " +
+                                    "`password` VARCHAR(255) NOT NULL, " +
+                                    "`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                                    ")";
+            jdbcTemplate.execute(createUsersSql);
+
+            // 4. Create transactions table if not exists
             String createSql = "CREATE TABLE IF NOT EXISTS " + tableIdentifier + " (" +
                                "`id` INT PRIMARY KEY AUTO_INCREMENT, " +
+                               "`user_id` INT, " +
                                "`type` VARCHAR(10) NOT NULL, " +
                                "`amount` DECIMAL(10,2) NOT NULL, " +
                                "`category` VARCHAR(50) NOT NULL, " +
@@ -142,7 +163,11 @@ public class ExpenseDAO implements InitializingBean {
                                ")";
             jdbcTemplate.execute(createSql);
 
-            // 4. Ensure required columns exist
+            // 5. Ensure required columns exist
+            try {
+                jdbcTemplate.execute("ALTER TABLE " + tableIdentifier + " ADD COLUMN `user_id` INT");
+            } catch (Exception ignored) {}
+
             try {
                 jdbcTemplate.execute("ALTER TABLE " + tableIdentifier + " ADD COLUMN `transaction_date` DATE");
             } catch (Exception ignored) {}
@@ -156,7 +181,7 @@ public class ExpenseDAO implements InitializingBean {
             } catch (Exception ignored) {}
 
             initialized = true;
-            System.out.println("Database table " + tableIdentifier + " verified successfully.");
+            System.out.println("Database tables verified successfully.");
         } catch (Exception e) {
             initialized = false;
             System.err.println("Database table check notice: " + e.getMessage());
@@ -164,22 +189,38 @@ public class ExpenseDAO implements InitializingBean {
     }
 
     /**
-     * Get all records from the database.
+     * Claims existing transactions created before multi-user login was enabled.
      */
-    public List<Expense> getAllExpenses() {
-        return getFilteredExpenses(null, null, null);
+    public void assignOrphanRecords(Long userId) {
+        if (userId == null) return;
+        try {
+            ensureTableExists();
+            String sql = "UPDATE " + getTableName() + " SET `user_id` = ? WHERE `user_id` IS NULL";
+            jdbcTemplate.update(sql, userId);
+        } catch (Exception ignored) {}
     }
 
     /**
-     * Filter records by type, start date, and end date (or return all if no filters given).
+     * Get all records for a specific user.
      */
-    public List<Expense> getFilteredExpenses(String type, LocalDate startDate, LocalDate endDate) {
+    public List<Expense> getAllExpenses(Long userId) {
+        return getFilteredExpenses(userId, null, null, null);
+    }
+
+    /**
+     * Filter records by user, type, start date, and end date.
+     */
+    public List<Expense> getFilteredExpenses(Long userId, String type, LocalDate startDate, LocalDate endDate) {
         ensureTableExists();
-        StringBuilder sql = new StringBuilder("SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM ")
+        StringBuilder sql = new StringBuilder("SELECT `id`, `user_id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM ")
                 .append(getTableName())
                 .append(" WHERE 1=1");
         List<Object> params = new ArrayList<>();
 
+        if (userId != null) {
+            sql.append(" AND (`user_id` = ? OR `user_id` IS NULL)");
+            params.add(userId);
+        }
         if (type != null && !type.trim().isEmpty() && !type.equalsIgnoreCase("ALL")) {
             sql.append(" AND `type` = ?");
             params.add(type.toUpperCase());
@@ -202,12 +243,20 @@ public class ExpenseDAO implements InitializingBean {
     }
 
     /**
-     * Find a single record by its ID.
+     * Find a single record by its ID, ensuring it belongs to the given user.
      */
-    public Expense getExpenseById(Long id) {
+    public Expense getExpenseById(Long id, Long userId) {
         ensureTableExists();
-        String sql = "SELECT `id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM " + getTableName() + " WHERE `id` = ?";
-        List<Expense> results = jdbcTemplate.query(sql, rowMapper, id);
+        String sql = "SELECT `id`, `user_id`, `type`, `amount`, `category`, `note`, `transaction_date` FROM " + getTableName() + " WHERE `id` = ?";
+        List<Object> params = new ArrayList<>();
+        params.add(id);
+
+        if (userId != null) {
+            sql += " AND (`user_id` = ? OR `user_id` IS NULL)";
+            params.add(userId);
+        }
+
+        List<Expense> results = jdbcTemplate.query(sql, rowMapper, params.toArray());
         if (results.isEmpty()) {
             return null;
         }
@@ -215,14 +264,15 @@ public class ExpenseDAO implements InitializingBean {
     }
 
     /**
-     * Add a new record into the database.
+     * Add a new record linked to a user.
      */
     public int addExpense(Expense expense) {
         ensureTableExists();
-        String sql = "INSERT INTO " + getTableName() + " (`type`, `amount`, `category`, `note`, `transaction_date`) " +
-                     "VALUES (?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO " + getTableName() + " (`user_id`, `type`, `amount`, `category`, `note`, `transaction_date`) " +
+                     "VALUES (?, ?, ?, ?, ?, ?)";
         java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
         return jdbcTemplate.update(sql,
+                expense.getUserId(),
                 expense.getType(),
                 expense.getAmount(),
                 expense.getCategory(),
@@ -232,48 +282,70 @@ public class ExpenseDAO implements InitializingBean {
     }
 
     /**
-     * Update an existing record by its ID.
+     * Update an existing record belonging to the user.
      */
-    public int updateExpense(Long id, Expense expense) {
+    public int updateExpense(Long id, Long userId, Expense expense) {
         ensureTableExists();
         String sql = "UPDATE " + getTableName() + " " +
                      "SET `type` = ?, `amount` = ?, `category` = ?, `note` = ?, `transaction_date` = ? " +
                      "WHERE `id` = ?";
+        List<Object> params = new ArrayList<>();
         java.sql.Date sqlDate = expense.getTransactionDate() != null ? java.sql.Date.valueOf(expense.getTransactionDate()) : null;
-        return jdbcTemplate.update(sql,
-                expense.getType(),
-                expense.getAmount(),
-                expense.getCategory(),
-                expense.getNote(),
-                sqlDate,
-                id
-        );
+        params.add(expense.getType());
+        params.add(expense.getAmount());
+        params.add(expense.getCategory());
+        params.add(expense.getNote());
+        params.add(sqlDate);
+        params.add(id);
+
+        if (userId != null) {
+            sql += " AND (`user_id` = ? OR `user_id` IS NULL)";
+            params.add(userId);
+        }
+
+        return jdbcTemplate.update(sql, params.toArray());
     }
 
     /**
-     * Delete a record from the database using its ID.
+     * Delete a record belonging to the user.
      */
-    public int deleteExpense(Long id) {
+    public int deleteExpense(Long id, Long userId) {
         ensureTableExists();
         String sql = "DELETE FROM " + getTableName() + " WHERE `id` = ?";
-        return jdbcTemplate.update(sql, id);
+        List<Object> params = new ArrayList<>();
+        params.add(id);
+
+        if (userId != null) {
+            sql += " AND (`user_id` = ? OR `user_id` IS NULL)";
+            params.add(userId);
+        }
+
+        return jdbcTemplate.update(sql, params.toArray());
     }
 
     /**
-     * Calculate total income.
+     * Calculate total income for a user.
      */
-    public BigDecimal getTotalIncome() {
+    public BigDecimal getTotalIncome(Long userId) {
         ensureTableExists();
         String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM " + getTableName() + " WHERE `type` = 'INCOME'";
+        if (userId != null) {
+            sql += " AND (`user_id` = ? OR `user_id` IS NULL)";
+            return jdbcTemplate.queryForObject(sql, BigDecimal.class, userId);
+        }
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
 
     /**
-     * Calculate total expenses.
+     * Calculate total expenses for a user.
      */
-    public BigDecimal getTotalExpenses() {
+    public BigDecimal getTotalExpenses(Long userId) {
         ensureTableExists();
         String sql = "SELECT COALESCE(SUM(`amount`), 0) FROM " + getTableName() + " WHERE `type` = 'EXPENSE'";
+        if (userId != null) {
+            sql += " AND (`user_id` = ? OR `user_id` IS NULL)";
+            return jdbcTemplate.queryForObject(sql, BigDecimal.class, userId);
+        }
         return jdbcTemplate.queryForObject(sql, BigDecimal.class);
     }
 
