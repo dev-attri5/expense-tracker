@@ -6,6 +6,33 @@ pom.xml.versionsBackup
 pom.xml.next
 release.properties
 
+# === Security & Sensitive Credentials ===
+# Environment variable files and secret properties
+.env
+.env.*
+*.env
+application-local.properties
+application-secret.properties
+application-prod.properties
+
+# Database backups and user data dumps
+*.dump
+*.sql.gz
+backup.sql
+dump.sql
+data_export.sql
+
+# Log files (can leak stack traces and sensitive inputs)
+*.log
+logs/
+
+# SSL and Cryptographic keys/certificates
+*.pem
+*.key
+*.jks
+*.keystore
+*.p12
+
 # IntelliJ IDEA
 .idea/
 *.iml
@@ -32,4 +59,3 @@ Thumbs.db
 # Archive files
 *.zip
 *.tar.gz
-
