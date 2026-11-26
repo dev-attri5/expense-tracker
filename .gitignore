@@ -61,5 +61,6 @@ Thumbs.db
 *.tar.gz
 
 
-# Markdown files
+# Markdown files (ignore internal docs, keep public README)
 *.md
+!README.md
